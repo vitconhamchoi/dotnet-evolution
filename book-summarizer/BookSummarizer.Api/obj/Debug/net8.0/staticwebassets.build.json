@@ -1,11 +1,39 @@
 {
   "Version": 1,
-  "Hash": "kK3iZED9AKO+ZcXesSvLwd61o33ulXW+FqgxqQ6RN9U=",
+  "Hash": "YJZG0vU3tkWgavJZ7zPHkPkSxvbndAGf1otEKn6naQc=",
   "Source": "BookSummarizer.Api",
   "BasePath": "_content/BookSummarizer.Api",
   "Mode": "Default",
   "ManifestType": "Build",
   "ReferencedProjectsConfiguration": [],
-  "DiscoveryPatterns": [],
-  "Assets": []
+  "DiscoveryPatterns": [
+    {
+      "Name": "BookSummarizer.Api/wwwroot",
+      "Source": "BookSummarizer.Api",
+      "ContentRoot": "/Users/vietanh/Documents/Github/dotnet-evolution/book-summarizer/BookSummarizer.Api/wwwroot/",
+      "BasePath": "_content/BookSummarizer.Api",
+      "Pattern": "**"
+    }
+  ],
+  "Assets": [
+    {
+      "Identity": "/Users/vietanh/Documents/Github/dotnet-evolution/book-summarizer/BookSummarizer.Api/wwwroot/index.html",
+      "SourceId": "BookSummarizer.Api",
+      "SourceType": "Discovered",
+      "ContentRoot": "/Users/vietanh/Documents/Github/dotnet-evolution/book-summarizer/BookSummarizer.Api/wwwroot/",
+      "BasePath": "_content/BookSummarizer.Api",
+      "RelativePath": "index.html",
+      "AssetKind": "All",
+      "AssetMode": "All",
+      "AssetRole": "Primary",
+      "AssetMergeBehavior": "PreferTarget",
+      "AssetMergeSource": "",
+      "RelatedAsset": "",
+      "AssetTraitName": "",
+      "AssetTraitValue": "",
+      "CopyToOutputDirectory": "Never",
+      "CopyToPublishDirectory": "PreserveNewest",
+      "OriginalItemSpec": "wwwroot/index.html"
+    }
+  ]
 }

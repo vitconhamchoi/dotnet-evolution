@@ -32,3 +32,9 @@
 /Users/vietanh/Documents/Github/dotnet-evolution/book-summarizer/BookSummarizer.Api/obj/Debug/net8.0/BookSummarizer.Api.pdb
 /Users/vietanh/Documents/Github/dotnet-evolution/book-summarizer/BookSummarizer.Api/obj/Debug/net8.0/BookSummarizer.Api.genruntimeconfig.cache
 /Users/vietanh/Documents/Github/dotnet-evolution/book-summarizer/BookSummarizer.Api/obj/Debug/net8.0/ref/BookSummarizer.Api.dll
+/Users/vietanh/Documents/Github/dotnet-evolution/book-summarizer/BookSummarizer.Api/bin/Debug/net8.0/BookSummarizer.Api.staticwebassets.runtime.json
+/Users/vietanh/Documents/Github/dotnet-evolution/book-summarizer/BookSummarizer.Api/bin/Debug/net8.0/UglyToad.PdfPig.dll
+/Users/vietanh/Documents/Github/dotnet-evolution/book-summarizer/BookSummarizer.Api/bin/Debug/net8.0/UglyToad.PdfPig.Core.dll
+/Users/vietanh/Documents/Github/dotnet-evolution/book-summarizer/BookSummarizer.Api/bin/Debug/net8.0/UglyToad.PdfPig.Fonts.dll
+/Users/vietanh/Documents/Github/dotnet-evolution/book-summarizer/BookSummarizer.Api/bin/Debug/net8.0/UglyToad.PdfPig.Tokenization.dll
+/Users/vietanh/Documents/Github/dotnet-evolution/book-summarizer/BookSummarizer.Api/bin/Debug/net8.0/UglyToad.PdfPig.Tokens.dll

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BookSummarizer.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+40ec9dd1f5e47f191eea9bfa5569c8e5bc47584e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+66365443406c8254de9dac8036a58e412dedb3db")]
 [assembly: System.Reflection.AssemblyProductAttribute("BookSummarizer.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BookSummarizer.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Book Summarizer</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px; }
+    textarea, input, select { width: 100%; margin-top: 8px; margin-bottom: 16px; padding: 10px; }
+    button { padding: 10px 16px; cursor: pointer; }
+    pre { background: #111; color: #eee; padding: 16px; white-space: pre-wrap; border-radius: 8px; min-height: 240px; }
+    .meta { color: #444; font-size: 14px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Book Summarizer</h1>
+  <p class="meta">Demo UI xem stream trực tiếp từ backend .NET</p>
+
+  <label>Đường dẫn file</label>
+  <input id="filePath" value="/Users/vietanh/Documents/Github/dotnet-evolution/dotnet-ai-integration-strengths.md" />
+
+  <label>Kiểu output</label>
+  <select id="outputStyle">
+    <option value="executive-summary">executive-summary</option>
+    <option value="study-notes">study-notes</option>
+  </select>
+
+  <label>Giới hạn ký tự đầu vào</label>
+  <input id="maxChars" type="number" value="2000" />
+
+  <button id="runBtn">Tóm tắt bằng stream</button>
+
+  <h3>Kết quả</h3>
+  <div id="status" class="meta"></div>
+  <pre id="output"></pre>
+
+  <script>
+    const output = document.getElementById('output');
+    const status = document.getElementById('status');
+    const runBtn = document.getElementById('runBtn');
+
+    runBtn.addEventListener('click', async () => {
+      output.textContent = '';
+      status.textContent = 'Đang chạy...';
+
+      const response = await fetch('/api/books/summarize/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filePath: document.getElementById('filePath').value,
+          outputStyle: document.getElementById('outputStyle').value,
+          maxChars: Number(document.getElementById('maxChars').value)
+        })
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+
+        for (const eventBlock of events) {
+          const lines = eventBlock.split('\n');
+          const eventLine = lines.find(x => x.startsWith('event:'));
+          const dataLine = lines.find(x => x.startsWith('data:'));
+          if (!eventLine || !dataLine) continue;
+
+          const eventName = eventLine.replace('event:', '').trim();
+          const data = dataLine.replace('data:', '').trim();
+          const parsed = JSON.parse(data);
+
+          if (eventName === 'metadata') {
+            status.textContent = `File: ${parsed.FileName} | chars: ${parsed.CharacterCount}`;
+          }
+
+          if (eventName === 'chunk') {
+            output.textContent += parsed.content;
+          }
+
+          if (eventName === 'done') {
+            status.textContent += ` | model: ${parsed.model || 'unknown'} | totalTokens: ${parsed.usage?.TotalTokens ?? 0} | elapsedMs: ${parsed.elapsedMs}`;
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>

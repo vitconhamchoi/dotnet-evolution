@@ -1,0 +1,25 @@
+{
+  "Files": [
+    {
+      "Id": "/Users/vietanh/Documents/Github/dotnet-evolution/book-summarizer/BookSummarizer.Api/wwwroot/index.html",
+      "PackagePath": "staticwebassets/index.html"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.BookSummarizer.Api.Microsoft.AspNetCore.StaticWebAssets.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.build.BookSummarizer.Api.props",
+      "PackagePath": "build\\BookSummarizer.Api.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.buildMultiTargeting.BookSummarizer.Api.props",
+      "PackagePath": "buildMultiTargeting\\BookSummarizer.Api.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.buildTransitive.BookSummarizer.Api.props",
+      "PackagePath": "buildTransitive\\BookSummarizer.Api.props"
+    }
+  ],
+  "ElementsToRemove": []
+}

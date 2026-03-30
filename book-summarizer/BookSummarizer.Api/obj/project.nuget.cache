@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "sU6t7vP0Yf8=",
+  "dgSpecHash": "UR6gyTGhjkk=",
   "success": true,
   "projectFilePath": "/Users/vietanh/Documents/Github/dotnet-evolution/book-summarizer/BookSummarizer.Api/BookSummarizer.Api.csproj",
   "expectedPackageFiles": [
@@ -10,7 +10,12 @@
     "/Users/vietanh/.nuget/packages/swashbuckle.aspnetcore/6.4.0/swashbuckle.aspnetcore.6.4.0.nupkg.sha512",
     "/Users/vietanh/.nuget/packages/swashbuckle.aspnetcore.swagger/6.4.0/swashbuckle.aspnetcore.swagger.6.4.0.nupkg.sha512",
     "/Users/vietanh/.nuget/packages/swashbuckle.aspnetcore.swaggergen/6.4.0/swashbuckle.aspnetcore.swaggergen.6.4.0.nupkg.sha512",
-    "/Users/vietanh/.nuget/packages/swashbuckle.aspnetcore.swaggerui/6.4.0/swashbuckle.aspnetcore.swaggerui.6.4.0.nupkg.sha512"
+    "/Users/vietanh/.nuget/packages/swashbuckle.aspnetcore.swaggerui/6.4.0/swashbuckle.aspnetcore.swaggerui.6.4.0.nupkg.sha512",
+    "/Users/vietanh/.nuget/packages/uglytoad.pdfpig/1.7.0-custom-5/uglytoad.pdfpig.1.7.0-custom-5.nupkg.sha512",
+    "/Users/vietanh/.nuget/packages/uglytoad.pdfpig.core/1.7.0-custom-5/uglytoad.pdfpig.core.1.7.0-custom-5.nupkg.sha512",
+    "/Users/vietanh/.nuget/packages/uglytoad.pdfpig.fonts/1.7.0-custom-5/uglytoad.pdfpig.fonts.1.7.0-custom-5.nupkg.sha512",
+    "/Users/vietanh/.nuget/packages/uglytoad.pdfpig.tokenization/1.7.0-custom-5/uglytoad.pdfpig.tokenization.1.7.0-custom-5.nupkg.sha512",
+    "/Users/vietanh/.nuget/packages/uglytoad.pdfpig.tokens/1.7.0-custom-5/uglytoad.pdfpig.tokens.1.7.0-custom-5.nupkg.sha512"
   ],
   "logs": []
 }

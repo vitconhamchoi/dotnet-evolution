@@ -13,8 +13,12 @@
 Phiên bản mẫu hiện hỗ trợ:
 - `.txt`
 - `.md`
+- `.pdf`
 
-Muốn hỗ trợ `.pdf`, bước tiếp theo là bổ sung PDF text extraction service.
+Ứng dụng có thêm:
+- UI web đơn giản tại `/`
+- streaming SSE tại `/api/books/summarize/stream`
+- usage metering tại `/api/usage`
 
 ## Cấu hình
 
@@ -35,14 +39,34 @@ dotnet run
 
 ## Gọi API
 
+### Tóm tắt thường
+
 ```bash
 curl -X POST http://localhost:5148/api/books/summarize \
   -H "Content-Type: application/json" \
   -d '{
     "filePath": "/absolute/path/to/book.txt",
     "outputStyle": "executive-summary",
-    "maxChars": 12000
+    "maxChars": 3000
   }'
+```
+
+### Tóm tắt dạng stream
+
+```bash
+curl -N -X POST http://localhost:5148/api/books/summarize/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filePath": "/absolute/path/to/book.pdf",
+    "outputStyle": "executive-summary",
+    "maxChars": 2000
+  }'
+```
+
+### Xem usage metering
+
+```bash
+curl http://localhost:5148/api/usage
 ```
 
 ## Ý nghĩa kiến trúc
