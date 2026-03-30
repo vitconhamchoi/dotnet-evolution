@@ -1,654 +1,516 @@
-# High-level design cho ứng dụng .NET tích hợp AI
+# High-level design cho ứng dụng .NET tích hợp AI — bản có mô hình rõ ràng
 
-Tài liệu này trả lời 3 câu hỏi thực dụng:
-
-1. **Ứng dụng .NET có AI nên được thiết kế high-level thế nào?**
-2. **AI nằm ở đâu trong hệ thống?**
-3. **Nếu AI tốn tiền theo token / API cost thì làm sao mô hình kinh doanh vẫn có lãi?**
-
-Tài liệu này không đi vào code chi tiết. Mục tiêu là nhìn hệ thống từ trên cao nhưng vẫn đủ thực dụng để bắt tay build.
+Tài liệu này sửa lại theo đúng ý đại ca:
+- **phải có mô hình / sơ đồ**
+- phải tách rõ:
+  - **app thường có gắn AI**
+  - **AI-native app**
+- phải chỉ ra:
+  - **AI nằm ở đâu**
+  - **AI là lõi hay chỉ là module phụ**
+  - **AI tốn tiền ở đâu**
+  - **kiếm tiền thế nào để còn lãi**
 
 ---
 
-# 1) Nguyên tắc lớn: AI không phải toàn bộ hệ thống
+# 1) Phân loại đúng ngay từ đầu
 
-Sai lầm phổ biến là nghĩ:
-- app AI = gọi model
+## Loại A — App thường có gắn AI
+Ví dụ:
+- CRM có AI viết email
+- support tool có AI reply
+- booking app có AI chăm sóc khách
 
-Thực tế:
-- model chỉ là **một thành phần**
-- còn sản phẩm thật phải có:
-  - auth
-  - API
-  - business rules
-  - storage
-  - caching
-  - logging
-  - billing
-  - queue
-  - observability
-  - fallback / retry
+### Bản chất
+- **core business vẫn là CRM / support / booking**
+- AI là tính năng tăng giá trị
+
+---
+
+## Loại B — AI-native app
+Ví dụ:
+- internal knowledge assistant
+- legal search AI
+- AI document extraction
+- AI support copilot
+- AI agent workflow app
+
+### Bản chất
+- **AI là lõi hệ thống**
+- không có AI thì app gần như mất lý do tồn tại
+
+---
+
+# 2) Mô hình HLD cho app thường có gắn AI
+
+## Sơ đồ
+
+```text
++----------------------+
+|      Web / Mobile    |
++----------+-----------+
+           |
+           v
++----------------------+
+|   ASP.NET Core API   |
++----------+-----------+
+           |
+  +--------+---------+
+  |                  |
+  v                  v
++---------+     +-----------+
+| Business |     | AI Module |
+| Services |     | (optional)|
++----+----+     +-----+-----+
+     |                |
+     v                v
++---------+     +-----------+
+| SQL/PG  |     | LLM API   |
++---------+     +-----------+
+```
 
 ## Câu chốt
-**Trong app .NET tích hợp AI, AI nên là một service nằm trong kiến trúc, không phải toàn bộ kiến trúc.**
+Ở mô hình này:
+- **business là lõi**
+- AI là **module phụ trợ**
+
+## Ví dụ
+CRM:
+- lõi là lead, customer, pipeline, activity
+- AI chỉ giúp:
+  - viết email
+  - tóm tắt call
+  - phân loại lead
+
+### Nếu AI chết thì sao?
+- app vẫn sống
+- chỉ mất tính năng premium
 
 ---
 
-# 2) High-level design chuẩn cho app .NET có AI
+# 3) Mô hình HLD cho AI-native app
 
 ## Sơ đồ tổng quát
 
 ```text
-[Web / Mobile / Admin UI]
-            |
-            v
-     [ASP.NET Core API]
-            |
-   -----------------------
-   |         |           |
-   v         v           v
-[Auth]  [Business]   [AI Orchestrator]
-   |         |           |
-   |         |     ----------------------
-   |         |     |         |          |
-   |         |     v         v          v
-   |         | [Prompt] [Vector DB] [LLM Provider]
-   |         | [Tools ] [Cache    ] [Embeddings ]
-   |         |
-   v         v
-[SQL/PG] [Queue/Worker]
-            |
-            v
-   [Background AI Jobs]
++--------------------------+
+|      Web / Chat UI       |
++------------+-------------+
+             |
+             v
++--------------------------+
+|     ASP.NET Core API     |
++------------+-------------+
+             |
+             v
++--------------------------+
+|      AI Orchestrator     |
+| prompt / routing / tools |
+| memory / retries / parse |
++-----+---------+----------+
+      |         | 
+      |         |
+      v         v
++-----------+  +----------------+
+| Vector DB |  | Tool Executors  |
+| / Search  |  | DB, HTTP, ERP   |
++-----+-----+  +--------+-------+
+      |                 |
+      v                 v
++-----------+    +-------------+
+| Embeddings|    | Business DB |
+|  Service  |    | SQL / PG    |
++-----+-----+    +-------------+
+      |
+      v
++----------------+
+|  LLM Provider   |
+| OpenAI/Azure/...|
++----------------+
 ```
+
+## Câu chốt
+Ở mô hình này:
+- **AI orchestration là lõi hệ thống**
+- API, DB, auth chỉ là lớp đỡ phía ngoài
+
+## Ví dụ
+Internal knowledge assistant:
+- không có retrieval + model + answer synthesis
+- thì app gần như không còn giá trị
 
 ---
 
-# 3) AI nằm ở đâu?
+# 4) AI nằm ở đâu trong AI-native app?
 
-## AI không nên nằm trong UI
-UI chỉ nên:
-- gửi request
-- stream response
-- hiển thị kết quả
+## AI nằm ở 4 chỗ chính
 
-## AI nên nằm ở backend
-Cụ thể là trong lớp:
-- **AI Orchestrator / AI Service Layer**
+### 1. **LLM inference layer**
+- chat completion
+- reasoning
+- summarize
+- extract
+- classify
 
-### Vì sao?
-- giữ API key ở server
-- kiểm soát cost
-- thêm caching
-- log token usage
-- áp business rules
-- fallback provider
-- chặn abuse
+### 2. **Embedding layer**
+- vector hóa tài liệu
+- query embedding
+- semantic similarity
+
+### 3. **Retrieval / memory layer**
+- tìm context liên quan
+- inject context vào prompt
+- giữ session memory nếu cần
+
+### 4. **Tool orchestration layer**
+- gọi database
+- gọi API ngoài
+- gọi internal service
+- agent hành động nhiều bước
 
 ## Chốt
-**AI nên nằm ở backend service layer, không nằm trực tiếp ở client.**
+**Trong AI-native app, AI không nằm một chỗ. Nó ăn xuyên qua orchestration, retrieval, embedding và inference.**
 
 ---
 
-# 4) Cấu trúc hệ thống hợp lý
+# 5) Mô hình HLD cho AI RAG app
 
-## 4.1 Client Layer
-Có thể là:
-- React / Angular / Blazor / mobile app
-- admin dashboard
-- internal portal
-
-### Vai trò
-- nhập câu hỏi / file / yêu cầu
-- xem kết quả
-- chat / upload / dashboard
-
-### Không nên làm
-- không gọi trực tiếp LLM provider
-- không giữ token model ở client
-
----
-
-## 4.2 ASP.NET Core API Layer
-Đây là entry point của hệ thống.
-
-### Vai trò
-- nhận request
-- auth user
-- validate input
-- quota/rate limit
-- route sang business flow hoặc AI flow
-- trả output về client
-
-### Endpoint ví dụ
-- `/chat`
-- `/summarize`
-- `/extract`
-- `/search`
-- `/embed/reindex`
-- `/admin/usage`
-
----
-
-## 4.3 Business Service Layer
-Đây là phần cực quan trọng nhưng nhiều app AI quên mất.
-
-### Vai trò
-- chứa rule nghiệp vụ
-- quyết định khi nào gọi AI, khi nào không
-- chuẩn hóa input/output
-- áp policy theo từng loại user
-
-### Ví dụ
-- khách free chỉ được hỏi 5 lần/ngày
-- file > 20MB phải vào queue, không xử lý sync
-- legal docs phải bật citation bắt buộc
-- CRM message chỉ gửi khi đã có review
-
-## Chốt
-**Business layer quyết định AI được dùng thế nào.**
-
----
-
-## 4.4 AI Orchestrator Layer
-Đây là trái tim của app AI.
-
-### Vai trò
-- build prompt
-- chọn model
-- gọi embeddings
-- gọi vector search
-- gọi tool/function
-- retry/fallback
-- normalize response
-- đo token cost
-
-### Các thành phần nhỏ bên trong
-- Prompt Builder
-- Model Router
-- Embedding Service
-- Vector Search Service
-- Tool Router
-- Output Parser
-- Cost Meter
-
-## Chốt
-**Đây là nơi AI thực sự diễn ra.**
-
----
-
-## 4.5 LLM Provider Layer
-Đây là nơi gọi model thật:
-- OpenAI
-- Azure OpenAI
-- Anthropic
-- Gemini
-- Ollama
-- OpenRouter / gateway khác
-
-### Vai trò
-- infer text
-- embeddings
-- function/tool calling
-- structured outputs
-
-### Lưu ý
-Nên bọc nó lại thành interface riêng.
-
-## Ví dụ abstraction
-```text
-ILLMClient
-  - ChatAsync
-  - StreamAsync
-  - EmbedAsync
-  - CallToolsAsync
-```
-
-### Vì sao?
-- dễ đổi provider
-- dễ failover
-- dễ test
-- tránh khóa cứng vào 1 hãng
-
----
-
-## 4.6 Data Storage Layer
-Ứng dụng AI thật thường cần ít nhất 3 lớp lưu trữ.
-
-### A. SQL / PostgreSQL / SQL Server
-Lưu:
-- user
-- team
-- roles
-- chat logs
-- usage
-- billing
-- prompt history
-- extracted data
-
-### B. Vector DB
-Lưu:
-- embeddings
-- chunked documents
-- metadata cho RAG
-
-Ví dụ:
-- pgvector
-- Qdrant
-- Pinecone
-- Weaviate
-
-### C. Cache
-Lưu:
-- answer cache
-- embedding cache
-- session cache
-- temporary job state
-
-Ví dụ:
-- Redis
-- IMemoryCache
-
----
-
-## 4.7 Queue / Worker Layer
-Rất nhiều việc AI không nên làm trong request đồng bộ.
-
-### Nên đưa vào background job
-- index tài liệu
-- OCR hàng loạt
-- re-embedding
-- summarize nhiều file
-- nightly reports
-- large document extraction
-
-### Công nghệ phù hợp
-- Hangfire
-- Quartz
-- background worker
-- RabbitMQ / MassTransit / Azure Queue / Kafka nếu lớn hơn
-
-## Chốt
-**Task AI nặng nên tách ra background processing.**
-
----
-
-# 5) Mẫu kiến trúc theo từng loại ứng dụng
-
-## 5.1 AI Chat / Q&A App
+## Sơ đồ chia 2 luồng: indexing và query
 
 ```text
-Client Chat UI
-   -> ASP.NET Core API
-   -> AI Orchestrator
-   -> LLM Provider
-   -> SQL lưu chat history
-   -> Redis cache
+                 INDEXING FLOW
+
++---------+     +-----------+     +-----------+     +-----------+
+| Upload  | --> | Chunking  | --> | Embedding | --> | Vector DB |
+|  Docs   |     | Pipeline  |     |  Service  |     |  Storage  |
++---------+     +-----------+     +-----------+     +-----------+
+
+
+                  QUERY FLOW
+
++---------+     +-----------+     +-----------+     +-----------+
+|  User   | --> | ASP.NET   | --> | Retriever | --> | Context    |
+| Question|     |   API     |     |           |     | Builder    |
++---------+     +-----------+     +-----------+     +-----------+
+                                                        |
+                                                        v
+                                                  +-----------+
+                                                  | LLM Model  |
+                                                  +-----------+
+                                                        |
+                                                        v
+                                                  +-----------+
+                                                  |  Answer    |
+                                                  +-----------+
 ```
 
-### AI nằm ở đâu?
-- trong AI Orchestrator
-- model chỉ được gọi từ backend
+## AI là lõi ở đâu?
+- embedding
+- retrieval
+- prompt synthesis
+- answer generation
 
-### Phí AI phát sinh ở đâu?
-- mỗi request chat
-- mỗi token input/output
+## Cost phát sinh ở đâu?
+- embedding khi index
+- completion khi trả lời
 
-### Muốn có lãi thì làm gì?
-- giới hạn message free
-- cache câu hỏi lặp lại
-- phân tầng model:
-  - cheap model cho câu hỏi đơn giản
-  - strong model cho case khó
-- subscription theo quota
+## Muốn có lãi?
+- tính **setup fee** cho indexing ban đầu
+- tính **monthly subscription** theo số user / số tài liệu
+- cache query phổ biến
+- chỉ re-embed khi tài liệu thay đổi
 
 ---
 
-## 5.2 RAG cho tài liệu nội bộ
+# 6) Mô hình HLD cho AI document extraction app
 
 ```text
-Upload Docs
-  -> File Store
-  -> Background Worker
-  -> Chunk + Embed
-  -> Vector DB
-
-User Question
-  -> API
-  -> Vector Search
-  -> Context Builder
-  -> LLM Provider
-  -> Answer + Citation
++-----------+
+| Upload PDF|
++-----+-----+
+      |
+      v
++-----------+
+| OCR Layer |
++-----+-----+
+      |
+      v
++------------------+
+| Extraction Prompt|
+| / Structured AI  |
++-----+------------+
+      |
+      v
++------------------+
+| Validation Rules |
++-----+------------+
+      |
+      v
++------------------+
+| SQL / Export API |
++------------------+
 ```
 
-### AI nằm ở đâu?
-- embedding pipeline
-- retrieval + answer synthesis
-
-### Phí AI phát sinh ở đâu?
-- lúc embed tài liệu
-- lúc trả lời câu hỏi
-
-### Muốn có lãi thì làm gì?
-- tính setup fee cho indexing ban đầu
-- monthly fee theo số tài liệu / số user
-- giới hạn số query/tháng
-- cache semantic results
-- chunk hợp lý để giảm token
-
----
-
-## 5.3 AI Extract Documents
-
-```text
-Upload PDF/Image
-   -> API
-   -> OCR (nếu cần)
-   -> AI Extractor
-   -> Validation Rules
-   -> Save structured data
-   -> Export/API
-```
-
-### AI nằm ở đâu?
+## AI là lõi ở đâu?
 - OCR hậu xử lý
-- extraction step
+- extraction
 - normalize output
 
-### Phí AI phát sinh ở đâu?
-- theo document
-- theo số trang
-- theo OCR + extraction
+## Cost phát sinh ở đâu?
+- OCR cost
+- token extract cost
 
-### Muốn có lãi thì làm gì?
-- giá theo document volume
-- gói doanh nghiệp theo số lượng chứng từ
-- dùng pipeline 2 bước:
-  - regex/rule trước
-  - AI chỉ xử lý phần khó
-- tránh gọi LLM cho toàn bộ mọi thứ nếu rule-based đủ
+## Muốn có lãi?
+- bán theo **volume document**
+- rule-based trước, AI sau
+- chỉ dùng AI ở bước khó
 
----
+### Ví dụ lãi kiểu gì?
+Nếu 1 doc tốn:
+- OCR + model = 500đ
 
-## 5.4 AI CRM Assistant
-
-```text
-CRM Data
-   -> API
-   -> Business Rules
-   -> AI Message Generator / Lead Analyzer
-   -> Review / Approval
-   -> Send Email / SMS / Zalo
-```
-
-### AI nằm ở đâu?
-- lead scoring
-- message suggestion
-- summary / classification
-
-### Phí AI phát sinh ở đâu?
-- generate content
-- analyze conversation
-
-### Muốn có lãi thì làm gì?
-- tính theo seat/team
-- AI là add-on premium
-- quota theo số tin nhắn sinh ra
-- bắt review trước khi gửi để giảm risk pháp lý
+Thì không bán 600đ/doc.
+Phải bán theo:
+- giá trị tiết kiệm nhập liệu
+- ví dụ 2.000–5.000đ/doc hoặc package tháng
 
 ---
 
-## 5.5 AI Support Assistant
+# 7) Mô hình HLD cho AI copilot trong CRM / SaaS
 
 ```text
-Ticket Source
-   -> API / Webhook
-   -> Summarizer
-   -> Classifier
-   -> Suggested Reply Generator
-   -> Human Review / Auto-route
++-----------+
+| CRM UI    |
++-----+-----+
+      |
+      v
++-----------+
+| API Layer |
++-----+-----+
+      |
+      v
++------------------+
+| Business Rules   |
+| lead / customer  |
+| campaign / stage |
++-----+------------+
+      |
+      +----------------------+
+      |                      |
+      v                      v
++-------------+      +---------------+
+| SQL / CRM DB|      | AI Assistant  |
++-------------+      | write/score   |
+                     | summarize/reply|
+                     +-------+-------+
+                             |
+                             v
+                        +-----------+
+                        | LLM Model |
+                        +-----------+
 ```
 
-### AI nằm ở đâu?
+## AI là gì trong case này?
+- **không phải lõi sản phẩm**
+- nó là **premium booster**
+
+## Cost phát sinh ở đâu?
+- mỗi lần generate nội dung
+- mỗi lần summarize
+
+## Muốn có lãi?
+- AI là **add-on premium**
+- giới hạn quota theo plan
+- model mạnh chỉ cho gói cao
+
+---
+
+# 8) Mô hình HLD cho AI support assistant
+
+```text
++-------------+
+| Ticket / Msg |
++------+------+
+       |
+       v
++-------------+
+| API/Webhook |
++------+------+
+       |
+       v
++-------------------+
+| AI Support Engine |
+| summarize         |
+| classify          |
+| suggest reply     |
++------+------------+
+       |
+       v
++-------------+
+| Human Agent |
++-------------+
+```
+
+## AI là lõi hay phụ?
+- nếu chỉ gợi ý reply → phụ
+- nếu toàn bộ routing, triage, auto-answer là chính → gần thành lõi
+
+## Cost phát sinh ở đâu?
+- summarize ticket
+- classify
+- reply suggestion
+
+## Muốn có lãi?
+- dùng model rẻ cho classify/summarize
+- model vừa cho reply
+- enterprise plan theo ticket volume
+
+---
+
+# 9) Lớp kiến trúc bắt buộc phải có trong app AI nghiêm túc
+
+## 1. Auth / RBAC
+Không thể thiếu nếu là B2B.
+
+## 2. Usage Metering
+Phải log:
+- ai dùng
+- dùng bao nhiêu request
+- bao nhiêu token
+- cost bao nhiêu
+
+## 3. Model Router
+Không thể đốt model mạnh cho mọi case.
+
+## 4. Prompt Management
+Prompt phải version được.
+
+## 5. Cache Layer
+Để giảm cost.
+
+## 6. Worker / Queue
+Để đẩy task nặng ra nền.
+
+## 7. Observability
+Phải biết:
+- latency
+- lỗi provider
+- cost theo user/team
+- fail rate
+
+---
+
+# 10) AI cost đốt ở đâu?
+
+## 4 nguồn cost lớn nhất
+
+### A. Completion tokens
+- chat
 - summarize
-- classify
-- suggest response
+- extract
+- reply generation
 
-### Phí AI phát sinh ở đâu?
-- mỗi ticket
-- mỗi reply generation
+### B. Embedding tokens
+- index tài liệu
+- re-index
+- query embedding
 
-### Muốn có lãi thì làm gì?
-- giá theo ticket volume
-- auto-route + summary dùng model rẻ
-- reply chất lượng cao mới dùng model đắt
+### C. OCR / vision model
+- scan ảnh
+- đọc PDF ảnh
+- parse document phức tạp
 
----
-
-# 6) Phân lớp model để có lãi
-
-Đây là chỗ sống còn.
-
-## Sai lầm
-Dùng model mạnh nhất cho mọi request.
-
-## Cách đúng
-### Tầng 1 — Cheap model
-Dùng cho:
-- classify
-- summarize ngắn
-- rewrite đơn giản
-- moderation
-- tagging
-
-### Tầng 2 — Mid model
-Dùng cho:
-- support reply
-- email drafting
-- extraction vừa
-- RAG answer thông thường
-
-### Tầng 3 — Strong model
-Dùng cho:
-- legal reasoning
-- complex doc analysis
-- multi-step agent
-- high-value enterprise query
+### D. Background batch jobs
+- nightly processing
+- re-embed
+- summarize nhiều docs
 
 ## Chốt
-**Muốn lời, phải route model theo độ khó.**
+Muốn lời thì phải biết app mình đốt tiền ở **khâu nào**.
 
 ---
 
-# 7) Công thức kinh doanh để AI vẫn có lãi
+# 11) Mô hình giá để vẫn có lãi
 
-## 7.1 Không bán theo cảm giác, bán theo ROI
-
-Người dùng không trả tiền vì “có AI”.
-Họ trả tiền vì:
-- tiết kiệm giờ làm
-- giảm headcount
-- tăng conversion
-- tăng tốc xử lý
-- giảm sai sót
-
-### Ví dụ
-- extract chứng từ: giảm 2 nhân sự nhập liệu
-- support AI: giảm 30% thời gian xử lý ticket
-- CRM AI: tăng phản hồi lead trong 5 phút đầu
-
----
-
-## 7.2 Đừng để doanh thu tuyến tính với token cost
-
-Nếu doanh thu tăng 1 thì cost model tăng 1 theo, biên lợi nhuận sẽ xấu.
-
-### Cách tránh
-- caching
-- precompute embeddings
-- batch processing
-- rule-based trước, AI sau
-- model routing
-- quota per plan
-
----
-
-## 7.3 Mô hình giá nên dùng
-
-### A. Subscription + quota
+## Cách 1 — Subscription + quota
 Ví dụ:
-- 29$/tháng: 1.000 query
-- 99$/tháng: 10.000 query
-- enterprise: custom
+- Basic: 500 query/tháng
+- Pro: 5.000 query/tháng
+- Business: custom
 
-### B. Setup fee + monthly
+## Cách 2 — Setup fee + monthly
 Rất hợp cho:
-- internal docs RAG
-- legal/compliance search
-- enterprise deployment
+- internal knowledge base
+- enterprise AI search
+- legal/compliance AI
 
-### C. Pay-per-use
+## Cách 3 — Pay per document / pay per batch
 Hợp cho:
-- document extraction
-- OCR + AI processing
-- batch jobs
+- extraction
+- OCR
+- file processing
 
-### D. AI là add-on premium
-Hợp cho SaaS có sẵn.
+## Cách 4 — AI add-on
 Ví dụ:
-- CRM 30$/seat
-- AI assistant thêm 20$/seat
+- CRM gốc 49$/seat
+- AI add-on 19$/seat
 
 ---
 
-# 8) Những chỗ nên tối ưu để giữ biên lợi nhuận
+# 12) Công thức giữ biên lợi nhuận
 
-## A. Cache output
-Nếu câu hỏi lặp lại, không cần gọi model lại.
+## Phải làm 6 thứ này
 
-## B. Cache embedding
-Văn bản giống nhau không nên embed lại.
+### 1. Model tiering
+- cheap model: classify, tag, short summary
+- mid model: RAG answer, email drafting
+- strong model: legal, complex extraction, agent multi-step
 
-## C. Rút ngắn prompt
-Prompt càng dài càng đắt.
+### 2. Cache output
+Câu lặp lại thì không gọi lại model.
 
-## D. Tách pipeline rule-based + AI
-- regex / heuristic / rules trước
-- AI chỉ xử lý phần khó
+### 3. Cache embeddings
+Không embed lại nội dung cũ.
 
-## E. Background hóa việc nặng
-Request đồng bộ tốn cả cost lẫn UX.
+### 4. Rule-based trước, AI sau
+Nếu regex / deterministic parse xử lý được thì không gọi AI.
 
-## F. Logging cost theo user/team
-Để biết khách nào đang đốt tiền.
+### 5. Background hóa việc nặng
+Đỡ tốn cost sync và UX tốt hơn.
 
----
-
-# 9) Kiến trúc lợi nhuận theo loại sản phẩm
-
-## Loại 1: AI là tính năng phụ trong SaaS
-
-### Ví dụ
-- CRM có AI email
-- support tool có AI reply
-- booking app có AI chăm sóc khách
-
-### Ưu điểm
-- biên lợi nhuận dễ hơn
-- AI chỉ là phần add-on
-- core product vẫn giữ khách
-
-### Đây là mô hình ngon nhất
-Vì đại ca không sống chết chỉ nhờ token.
+### 6. Theo dõi cost per customer
+Nếu không log, rất dễ bán lỗ.
 
 ---
 
-## Loại 2: AI là lõi sản phẩm
+# 13) Kết luận đúng theo từng loại app
 
-### Ví dụ
-- AI doc extraction
-- AI internal knowledge search
-- legal AI search
+## Nếu là app thường có gắn AI
+- AI **không phải lõi**
+- business mới là lõi
+- AI là add-on tăng giá trị
 
-### Ưu điểm
-- value proposition rõ
-- dễ bán B2B
+## Nếu là AI-native app
+- AI **chính là lõi**
+- retrieval, prompt, tools, model routing là tim hệ thống
+- không có AI thì app gần như mất lý do tồn tại
 
-### Nhược điểm
-- phải kiểm soát cost chặt
-- chất lượng AI là thứ sống còn
+## Chốt cuối cùng
 
----
-
-# 10) Những nguyên tắc kiến trúc nếu muốn build lâu dài
-
-## Phải có
-- abstraction cho provider
-- usage metering
-- caching layer
-- audit/logging
-- retry/fallback
-- prompt versioning
-- background worker
-- vector storage nếu dùng RAG
-- auth và role-based access
-
-## Không nên làm
-- để client gọi model trực tiếp
-- hardcode prompt khắp nơi
-- không log token usage
-- dùng model đắt cho mọi case
-- không tách business rules khỏi AI rules
+**Đại ca nói đúng:**
+- với **AI-native app**, AI phải là lõi
+- HLD phải vẽ rõ mô hình
+- và phải chỉ ra chỗ đốt tiền + cách kiếm lời
 
 ---
 
-# 11) Mô hình HLD ngắn gọn nên dùng nhất
+# 14) Câu chốt cuối
 
-## Với hầu hết app .NET có AI
+## HLD chuẩn cho app .NET có AI phải trả lời đủ 5 câu:
+1. **AI là lõi hay tính năng phụ?**
+2. **AI nằm ở lớp nào?**
+3. **Dữ liệu nằm ở đâu?**
+4. **Cost bị đốt ở khâu nào?**
+5. **Kiếm tiền thế nào để margin vẫn dương?**
 
-```text
-Client
- -> ASP.NET Core API
- -> Business Services
- -> AI Orchestrator
- -> LLM / Embedding Provider
- -> SQL + Redis + Vector DB
- -> Worker / Queue cho task nặng
-```
-
-## AI nằm ở đâu?
-- **AI Orchestrator layer**
-- và **worker layer** cho batch/heavy processing
-
-## Tiền AI phát sinh ở đâu?
-- inference
-- embeddings
-- OCR + parsing
-- reprocessing batch jobs
-
-## Làm sao có lãi?
-- route model theo độ khó
-- giới hạn quota
-- dùng AI như premium feature hoặc B2B solution
-- cache + precompute + rule-based trước
-- pricing theo ROI, không pricing theo cảm tính
-
----
-
-# Kết luận cuối
-
-## Một app .NET tích hợp AI tốt không phải là app “có model”.
-Nó phải là app có:
-- backend rõ ràng
-- AI orchestration sạch
-- cost control
-- caching
-- quota
-- billing
-- business value rõ
-
-## Câu chốt cuối cùng
-
-**AI nên nằm trong service layer của hệ thống .NET.**
-
-**Muốn có lãi thì phải coi AI là một phần của business engine, không phải cái hố đốt token.**
+Nếu không trả lời được 5 câu đó thì HLD chưa đủ tốt.
