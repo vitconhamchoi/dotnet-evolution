@@ -3,54 +3,95 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Book Summarizer</title>
+  <title>Book Summarizer Chat</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px; }
-    textarea, input, select { width: 100%; margin-top: 8px; margin-bottom: 16px; padding: 10px; }
-    button { padding: 10px 16px; cursor: pointer; }
-    pre { background: #111; color: #eee; padding: 16px; white-space: pre-wrap; border-radius: 8px; min-height: 240px; }
-    .meta { color: #444; font-size: 14px; margin-bottom: 12px; }
+    body { font-family: Inter, Arial, sans-serif; background:#f5f7fb; margin:0; }
+    .app { max-width: 980px; margin: 24px auto; background:#fff; border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.08); overflow:hidden; }
+    .header { padding:20px 24px; border-bottom:1px solid #e8ebf2; }
+    .header h1 { margin:0; font-size:24px; }
+    .header p { margin:6px 0 0; color:#666; }
+    .layout { display:grid; grid-template-columns: 1fr 280px; min-height: 70vh; }
+    .chat { padding:20px; display:flex; flex-direction:column; gap:14px; }
+    .messages { flex:1; display:flex; flex-direction:column; gap:12px; max-height:60vh; overflow:auto; }
+    .msg { padding:14px 16px; border-radius:14px; white-space:pre-wrap; line-height:1.5; }
+    .user { background:#1d4ed8; color:#fff; align-self:flex-end; max-width:70%; }
+    .assistant { background:#eef2ff; color:#111; align-self:flex-start; max-width:85%; }
+    .composer { border-top:1px solid #e8ebf2; padding-top:16px; display:grid; gap:10px; }
+    input, select { padding:12px; border:1px solid #d9dfeb; border-radius:10px; width:100%; box-sizing:border-box; }
+    button { padding:12px 16px; border:0; border-radius:10px; background:#111827; color:#fff; cursor:pointer; }
+    .side { border-left:1px solid #e8ebf2; padding:20px; background:#fafbff; }
+    .side h3 { margin-top:0; }
+    .meta { font-size:14px; color:#555; white-space:pre-wrap; }
+    .hint { font-size:13px; color:#666; }
   </style>
 </head>
 <body>
-  <h1>Book Summarizer</h1>
-  <p class="meta">Demo UI xem stream trực tiếp từ backend .NET</p>
-
-  <label>Đường dẫn file</label>
-  <input id="filePath" value="/Users/vietanh/Documents/Github/dotnet-evolution/dotnet-ai-integration-strengths.md" />
-
-  <label>Kiểu output</label>
-  <select id="outputStyle">
-    <option value="executive-summary">executive-summary</option>
-    <option value="study-notes">study-notes</option>
-  </select>
-
-  <label>Giới hạn ký tự đầu vào</label>
-  <input id="maxChars" type="number" value="2000" />
-
-  <button id="runBtn">Tóm tắt bằng stream</button>
-
-  <h3>Kết quả</h3>
-  <div id="status" class="meta"></div>
-  <pre id="output"></pre>
+  <div class="app">
+    <div class="header">
+      <h1>Book Summarizer Chat</h1>
+      <p>Người dùng chỉ cần gõ tên gợi nhớ sách. Hệ thống tự tìm file gần đúng và stream bản tóm tắt.</p>
+    </div>
+    <div class="layout">
+      <div class="chat">
+        <div id="messages" class="messages">
+          <div class="msg assistant">Chào anh. Hãy nhập tên gợi nhớ sách, ví dụ: “spring in action”, “dotnet ai”, “saa c03”.</div>
+        </div>
+        <div class="composer">
+          <input id="query" placeholder="Nhập tên sách hoặc từ khóa gợi nhớ..." />
+          <select id="outputStyle">
+            <option value="executive-summary">executive-summary</option>
+            <option value="study-notes">study-notes</option>
+          </select>
+          <input id="maxChars" type="number" value="2500" />
+          <button id="sendBtn">Tóm tắt</button>
+          <div class="hint">Không cần nhập đường dẫn file.</div>
+        </div>
+      </div>
+      <div class="side">
+        <h3>Thông tin chạy</h3>
+        <div id="status" class="meta">Chưa có request.</div>
+        <h3>Usage</h3>
+        <div id="usage" class="meta">Đang chờ...</div>
+      </div>
+    </div>
+  </div>
 
   <script>
-    const output = document.getElementById('output');
+    const messages = document.getElementById('messages');
     const status = document.getElementById('status');
-    const runBtn = document.getElementById('runBtn');
+    const usage = document.getElementById('usage');
+    const query = document.getElementById('query');
+    const outputStyle = document.getElementById('outputStyle');
+    const maxChars = document.getElementById('maxChars');
+    const sendBtn = document.getElementById('sendBtn');
 
-    runBtn.addEventListener('click', async () => {
-      output.textContent = '';
-      status.textContent = 'Đang chạy...';
+    function addMessage(text, role) {
+      const div = document.createElement('div');
+      div.className = `msg ${role}`;
+      div.textContent = text;
+      messages.appendChild(div);
+      messages.scrollTop = messages.scrollHeight;
+      return div;
+    }
 
-      const response = await fetch('/api/books/summarize/stream', {
+    async function refreshUsage() {
+      const res = await fetch('/api/usage');
+      const data = await res.json();
+      usage.textContent = `requests: ${data.totalRequests}\npromptTokens: ${data.totalPromptTokens}\ncompletionTokens: ${data.totalCompletionTokens}\ntotalTokens: ${data.totalTokens}`;
+    }
+
+    sendBtn.addEventListener('click', async () => {
+      const q = query.value.trim();
+      if (!q) return;
+
+      addMessage(q, 'user');
+      const assistant = addMessage('', 'assistant');
+      status.textContent = 'Đang tìm sách và stream kết quả...';
+
+      const response = await fetch('/api/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filePath: document.getElementById('filePath').value,
-          outputStyle: document.getElementById('outputStyle').value,
-          maxChars: Number(document.getElementById('maxChars').value)
-        })
+        body: JSON.stringify({ query: q, outputStyle: outputStyle.value, maxChars: Number(maxChars.value) })
       });
 
       const reader = response.body.getReader();
@@ -72,23 +113,26 @@
           if (!eventLine || !dataLine) continue;
 
           const eventName = eventLine.replace('event:', '').trim();
-          const data = dataLine.replace('data:', '').trim();
-          const parsed = JSON.parse(data);
+          const data = JSON.parse(dataLine.replace('data:', '').trim());
 
           if (eventName === 'metadata') {
-            status.textContent = `File: ${parsed.FileName} | chars: ${parsed.CharacterCount}`;
+            status.textContent = `Đã match: ${data.title}\nPath: ${data.path}\nChars: ${data.characterCount}`;
           }
-
           if (eventName === 'chunk') {
-            output.textContent += parsed.content;
+            assistant.textContent += data.content;
+            messages.scrollTop = messages.scrollHeight;
           }
-
           if (eventName === 'done') {
-            status.textContent += ` | model: ${parsed.model || 'unknown'} | totalTokens: ${parsed.usage?.TotalTokens ?? 0} | elapsedMs: ${parsed.elapsedMs}`;
+            status.textContent += `\nModel: ${data.model || 'unknown'}\nTotalTokens: ${data.usage?.TotalTokens ?? 0}\nElapsedMs: ${data.elapsedMs}`;
+            await refreshUsage();
           }
         }
       }
+
+      query.value = '';
     });
+
+    refreshUsage();
   </script>
 </body>
 </html>
