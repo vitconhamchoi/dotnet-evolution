@@ -1,5 +1,7 @@
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Net.Http.Headers;
 using BookSummarizer.Api.Models;
 using BookSummarizer.Api.Services;
 
@@ -7,10 +9,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddHttpClient();
 builder.Services.AddSingleton<IBookTextExtractor, BookTextExtractor>();
 builder.Services.AddSingleton<ISummaryPromptBuilder, SummaryPromptBuilder>();
-builder.Services.AddHttpClient<IAiSummaryClient, OpenAiCompatibleSummaryClient>();
+builder.Services.AddHttpClient<IAiSummaryClient, OpenAiCompatibleSummaryClient>(client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(5);
+});
 
 var app = builder.Build();
 
@@ -31,39 +35,80 @@ app.MapPost("/api/books/summarize", async (
     IAiSummaryClient aiClient,
     CancellationToken cancellationToken) =>
 {
+    var prepared = await PrepareSummaryInputAsync(request, extractor, promptBuilder, cancellationToken);
+    var summary = await aiClient.SummarizeAsync(prepared.Prompt, cancellationToken);
+
+    return Results.Ok(new SummarizeBookResponse(
+        prepared.Book.FileName,
+        prepared.Book.CharacterCount,
+        summary,
+        DateTimeOffset.UtcNow));
+});
+
+app.MapPost("/api/books/summarize/stream", async (
+    HttpContext httpContext,
+    SummarizeBookRequest request,
+    IBookTextExtractor extractor,
+    ISummaryPromptBuilder promptBuilder,
+    IAiSummaryClient aiClient,
+    CancellationToken cancellationToken) =>
+{
+    var prepared = await PrepareSummaryInputAsync(request, extractor, promptBuilder, cancellationToken);
+
+    httpContext.Response.Headers.Append("Content-Type", "text/event-stream");
+    httpContext.Response.Headers.Append("Cache-Control", "no-cache");
+
+    await httpContext.Response.WriteAsync($"event: metadata\ndata: {JsonSerializer.Serialize(new
+    {
+        prepared.Book.FileName,
+        prepared.Book.CharacterCount
+    })}\n\n", cancellationToken);
+    await httpContext.Response.Body.FlushAsync(cancellationToken);
+
+    await foreach (var chunk in aiClient.StreamSummaryAsync(prepared.Prompt, cancellationToken))
+    {
+        var payload = JsonSerializer.Serialize(new { content = chunk });
+        await httpContext.Response.WriteAsync($"event: chunk\ndata: {payload}\n\n", cancellationToken);
+        await httpContext.Response.Body.FlushAsync(cancellationToken);
+    }
+
+    await httpContext.Response.WriteAsync("event: done\ndata: {}\n\n", cancellationToken);
+    await httpContext.Response.Body.FlushAsync(cancellationToken);
+});
+
+app.Run();
+
+static async Task<(ExtractedBook Book, string Prompt)> PrepareSummaryInputAsync(
+    SummarizeBookRequest request,
+    IBookTextExtractor extractor,
+    ISummaryPromptBuilder promptBuilder,
+    CancellationToken cancellationToken)
+{
     if (string.IsNullOrWhiteSpace(request.FilePath))
     {
-        return Results.BadRequest(new { error = "filePath is required" });
+        throw new BadHttpRequestException("filePath is required");
     }
 
     if (!File.Exists(request.FilePath))
     {
-        return Results.NotFound(new { error = "File not found" });
+        throw new FileNotFoundException("File not found", request.FilePath);
     }
 
     var extracted = await extractor.ExtractAsync(request.FilePath, cancellationToken);
 
     if (string.IsNullOrWhiteSpace(extracted.Content))
     {
-        return Results.BadRequest(new { error = "Could not extract text from file" });
+        throw new BadHttpRequestException("Could not extract text from file");
     }
 
     var prompt = promptBuilder.Build(new SummaryPromptInput(
         extracted.FileName,
         extracted.Content,
         request.OutputStyle ?? "executive-summary",
-        request.MaxChars is > 0 ? request.MaxChars.Value : 12000));
+        request.MaxChars is > 0 ? request.MaxChars.Value : 3000));
 
-    var summary = await aiClient.SummarizeAsync(prompt, cancellationToken);
-
-    return Results.Ok(new SummarizeBookResponse(
-        extracted.FileName,
-        extracted.CharacterCount,
-        summary,
-        DateTimeOffset.UtcNow));
-});
-
-app.Run();
+    return (extracted, prompt);
+}
 
 namespace BookSummarizer.Api.Models
 {
@@ -140,27 +185,88 @@ namespace BookSummarizer.Api.Services
     public interface IAiSummaryClient
     {
         Task<string> SummarizeAsync(string prompt, CancellationToken cancellationToken);
+        IAsyncEnumerable<string> StreamSummaryAsync(string prompt, CancellationToken cancellationToken);
     }
 
     public sealed class OpenAiCompatibleSummaryClient(HttpClient httpClient, IConfiguration configuration) : IAiSummaryClient
     {
         public async Task<string> SummarizeAsync(string prompt, CancellationToken cancellationToken)
         {
+            using var response = await SendRequestAsync(prompt, stream: false, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+            return document.RootElement
+                       .GetProperty("choices")[0]
+                       .GetProperty("message")
+                       .GetProperty("content")
+                       .GetString()
+                   ?? "No summary returned.";
+        }
+
+        public async IAsyncEnumerable<string> StreamSummaryAsync(string prompt, [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            using var response = await SendRequestAsync(prompt, stream: true, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var reader = new StreamReader(stream);
+
+            while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
+            {
+                var line = await reader.ReadLineAsync(cancellationToken);
+                if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("data:"))
+                {
+                    continue;
+                }
+
+                var data = line[5..].Trim();
+                if (data == "[DONE]")
+                {
+                    yield break;
+                }
+
+                using var document = JsonDocument.Parse(data);
+                var root = document.RootElement;
+
+                if (!root.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
+                {
+                    continue;
+                }
+
+                var delta = choices[0].GetProperty("delta");
+                if (delta.TryGetProperty("content", out var contentElement))
+                {
+                    var content = contentElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(content))
+                    {
+                        yield return content;
+                    }
+                }
+            }
+        }
+
+        private async Task<HttpResponseMessage> SendRequestAsync(string prompt, bool stream, CancellationToken cancellationToken)
+        {
             var apiKey = configuration["AI:ApiKey"];
             var baseUrl = configuration["AI:BaseUrl"];
-            var model = configuration["AI:Model"] ?? "gpt-4.1-mini";
+            var model = configuration["AI:Model"] ?? "anthropic/claude-opus-4.6";
 
             if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(baseUrl))
             {
                 throw new InvalidOperationException("Missing AI configuration. Set AI__ApiKey and AI__BaseUrl.");
             }
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, baseUrl.TrimEnd('/') + "/v1/chat/completions");
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+            var request = new HttpRequestMessage(HttpMethod.Post, baseUrl.TrimEnd('/') + "/v1/chat/completions");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
             request.Content = new StringContent(JsonSerializer.Serialize(new
             {
                 model,
                 temperature = 0.2,
+                stream,
                 messages = new object[]
                 {
                     new { role = "system", content = "You summarize books for busy professionals." },
@@ -168,19 +274,10 @@ namespace BookSummarizer.Api.Services
                 }
             }), Encoding.UTF8, "application/json");
 
-            using var response = await httpClient.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-
-            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-
-            var content = document.RootElement
-                .GetProperty("choices")[0]
-                .GetProperty("message")
-                .GetProperty("content")
-                .GetString();
-
-            return content ?? "No summary returned.";
+            return await httpClient.SendAsync(
+                request,
+                stream ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead,
+                cancellationToken);
         }
     }
 }
