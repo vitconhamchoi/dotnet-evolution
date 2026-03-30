@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "kK3iZED9AKO+ZcXesSvLwd61o33ulXW+FqgxqQ6RN9U=",
+  "Source": "BookSummarizer.Api",
+  "BasePath": "_content/BookSummarizer.Api",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
